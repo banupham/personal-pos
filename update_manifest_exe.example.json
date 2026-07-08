@@ -1,0 +1,6 @@
+{
+  "version": "0.1.2",
+  "notes": "Release notes for the packaged Windows exe build.",
+  "package_url": "https://github.com/banupham/personal-pos/releases/download/v0.1.2/PersonalPOS_0.1.2_windows.zip",
+  "sha256": "required_sha256_checksum_for_the_release_zip"
+}
