@@ -1,6 +1,6 @@
 {
-  "version": "0.1.2",
-  "notes": "Automated Windows exe build for version 0.1.2.",
-  "package_url": "https://github.com/banupham/personal-pos/raw/main/release/PersonalPOS_0.1.2.zip",
-  "sha256": "1456415e62c76aab4a207f3fc51873cadf83cda6cac929ee82a6b9074280f09b"
+  "version": "0.1.3",
+  "notes": "Automated Windows exe build for version 0.1.3.",
+  "package_url": "https://github.com/banupham/personal-pos/raw/main/release/PersonalPOS_0.1.3.zip",
+  "sha256": "1585ac0d3ab344def80283677e875ef145b0b45d391a7dad965ed593ba976d51"
 }
