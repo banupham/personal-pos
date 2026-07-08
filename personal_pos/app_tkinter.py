@@ -963,8 +963,9 @@ class PosApp(tk.Tk):
             return
         messagebox.showinfo(
             "Cap nhat xong",
-            f"Da cap nhat file chuong trinh.\nBackup: {backup}\nVui long dong va mo lai ung dung.",
+            f"Da tai va chuan bi cap nhat.\nBackup: {backup}\n\nUng dung se dong de trinh cap nhat ap dung ban moi.",
         )
+        self.destroy()
 
     def show_error(self, exc: Exception) -> None:
         message = str(exc) or exc.__class__.__name__

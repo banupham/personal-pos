@@ -10,6 +10,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 from typing import Any
 from urllib.parse import urlparse
 from urllib.request import urlopen
@@ -31,7 +32,7 @@ UPDATE_DIR = DATA_DIR / "updates"
 BACKUP_DIR = DATA_DIR / "backups" / "program"
 UPDATE_HISTORY_PATH = UPDATE_DIR / "update_history.jsonl"
 DEFAULT_DB_PATH = DATA_DIR / "app_pos.db"
-STAGE_DIR = UPDATE_DIR / "staged"
+STAGE_DIR = (Path(tempfile.gettempdir()) / "PersonalPOS" / "staged") if IS_FROZEN else UPDATE_DIR / "staged"
 
 PROTECTED_UPDATE_DIRS = {
     ".git",
