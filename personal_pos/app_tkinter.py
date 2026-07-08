@@ -106,8 +106,8 @@ class PosApp(tk.Tk):
             ("Báo cáo", "reports"),
         ]:
             ttk.Button(sidebar, text=text, style="Sidebar.TButton", command=lambda p=page: self.show_page(p)).pack(fill="x")
-        ttk.Button(sidebar, text="Khach no", style="Sidebar.TButton", command=lambda: self.show_page("debts")).pack(fill="x")
-        ttk.Button(sidebar, text="Cap nhat", style="Sidebar.TButton", command=lambda: self.show_page("updates")).pack(fill="x")
+        ttk.Button(sidebar, text="Công Nợ", style="Sidebar.TButton", command=lambda: self.show_page("debts")).pack(fill="x")
+        ttk.Button(sidebar, text="Update", style="Sidebar.TButton", command=lambda: self.show_page("updates")).pack(fill="x")
 
         self.content = ttk.Frame(self, padding=16)
         self.content.grid(row=0, column=1, sticky="nsew")
@@ -168,6 +168,7 @@ class PosApp(tk.Tk):
             self.sale_product_tree.heading(col, text=title)
             self.sale_product_tree.column(col, width=width, anchor="w")
         self.sale_product_tree.grid(row=2, column=0, sticky="nsew", pady=(0, 10))
+        self.sale_product_tree.bind("<Double-1>", lambda event: self.add_selected_to_cart())
         left.rowconfigure(2, weight=1)
 
         form = ttk.Frame(left, style="Panel.TFrame")
@@ -213,10 +214,10 @@ class PosApp(tk.Tk):
         ttk.Entry(controls, textvariable=self.invoice_discount_var).grid(row=1, column=0, sticky="ew", padx=(0, 8))
         ttk.Entry(controls, textvariable=self.paid_var).grid(row=1, column=1, sticky="ew", padx=(0, 8))
         ttk.Label(controls, textvariable=self.total_var, style="Metric.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 8))
-        ttk.Button(controls, text="Xóa dòng", command=self.remove_cart_item).grid(row=1, column=3, sticky="ew", padx=(0, 8))
+        ttk.Button(controls, text="Xóa Dòng", command=self.remove_cart_item).grid(row=1, column=3, sticky="ew", padx=(0, 8))
         ttk.Button(controls, text="Thanh toán", style="Accent.TButton", command=self.checkout).grid(row=1, column=4, sticky="ew")
 
-        ttk.Label(controls, text="ID khach no (neu co)", style="Subtle.TLabel").grid(row=2, column=0, sticky="w", pady=(8, 0))
+        ttk.Label(controls, text="ID Khách Nợ (DK id khách ở công nợ)", style="Subtle.TLabel").grid(row=2, column=0, sticky="w", pady=(8, 0))
         ttk.Entry(controls, textvariable=self.sale_customer_id_var).grid(row=3, column=0, columnspan=2, sticky="ew", padx=(0, 8))
 
     def _build_products_page(self) -> None:
@@ -280,12 +281,65 @@ class PosApp(tk.Tk):
             ttk.Entry(form, textvariable=var).grid(row=idx * 2, column=0, sticky="ew", pady=(0, 8))
         form.columnconfigure(0, weight=1)
         ttk.Button(form, text="Nhập kho", style="Accent.TButton", command=self.receive_stock).grid(row=9, column=0, sticky="ew", pady=(8, 0))
-        ttk.Label(form, text="Mẹo: xem ID hàng hóa ở bảng bên phải.", style="Subtle.TLabel").grid(row=10, column=0, sticky="w", pady=(12, 0))
+        ttk.Button(form,text="Xem lịch sử nhập kho",command=self.show_stock_history,).grid(row=10, column=0, columnspan=2, sticky="ew", pady=4)
+        ttk.Label(form, text="Mẹo: xem ID hàng hóa ở bảng bên phải.", style="Subtle.TLabel").grid(row=11, column=0, sticky="w", pady=(12, 0))
 
         ttk.Label(table_panel, text="Tồn kho hiện tại", style="Title.TLabel").grid(row=0, column=0, sticky="w")
         self.stock_inventory_tree = self._inventory_tree(table_panel)
+        self.stock_inventory_tree.bind("<Double-1>", lambda event: self.show_stock_history())
         self.stock_inventory_tree.grid(row=1, column=0, sticky="nsew", pady=(12, 0))
         self.stock_inventory_tree.bind("<<TreeviewSelect>>", self.fill_stock_product_id)
+
+    def show_stock_history(self) -> None:
+        product_id_text = self.stock_product_id_var.get().strip()
+
+        if not product_id_text:
+            messagebox.showwarning("Thiếu sản phẩm", "Hãy chọn một sản phẩm trong bảng tồn kho trước.")
+            return
+
+        try:
+            product_id = int(product_id_text)
+        except ValueError:
+            messagebox.showerror("Sai dữ liệu", "ID sản phẩm không hợp lệ.")
+            return
+
+        rows = self.service.stock_history(product_id, only_purchase=True)
+
+        win = tk.Toplevel(self)
+        win.title(f"Lịch sử tồn kho - Sản phẩm ID {product_id}")
+        win.geometry("850x420")
+
+        columns = ("time", "type", "qty", "cost", "ref", "note")
+
+        tree = ttk.Treeview(win, columns=columns, show="headings")
+        tree.pack(fill="both", expand=True, padx=10, pady=10)
+
+        headers = [
+            ("time", "Thời gian", 150),
+            ("type", "Loại", 110),
+            ("qty", "Số lượng", 90),
+            ("cost", "Giá nhập", 110),
+            ("ref", "Nguồn", 140),
+            ("note", "Ghi chú", 300),
+        ]
+
+        for col, title, width in headers:
+            tree.heading(col, text=title)
+            tree.column(col, width=width, anchor="w")
+
+        for row in rows:
+            tree.insert(
+                "",
+                "end",
+                values=(
+                    row.created_at,
+                    row.movement_type,
+                    row.quantity,
+                    money(row.unit_cost) if row.unit_cost is not None else "",
+                    row.reference_type or "",
+                    row.note or "",
+                ),
+            )
 
     def _build_debts_page(self) -> None:
         page = self._new_page("debts")
@@ -297,7 +351,7 @@ class PosApp(tk.Tk):
         table_panel.columnconfigure(0, weight=1)
         table_panel.rowconfigure(1, weight=1)
 
-        ttk.Label(form, text="Khach hang / cong no", style="Title.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 12))
+        ttk.Label(form, text="Khách Hàng / Công Nợ", style="Title.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 12))
         self.customer_code_var = tk.StringVar()
         self.customer_name_var = tk.StringVar()
         self.customer_phone_var = tk.StringVar()
@@ -306,22 +360,22 @@ class PosApp(tk.Tk):
 
         for idx, (label, var) in enumerate(
             [
-                ("Ma khach", self.customer_code_var),
-                ("Ten khach", self.customer_name_var),
-                ("Dien thoai", self.customer_phone_var),
-                ("ID khach thu no", self.customer_pay_id_var),
-                ("So tien thu", self.customer_pay_amount_var),
+                ("Mã khách", self.customer_code_var),
+                ("Tên Khách", self.customer_name_var),
+                ("Điện Thoại", self.customer_phone_var),
+                ("ID khách thu nợ (dành cho thu nợ)", self.customer_pay_id_var),
+                ("Số tiền nợ", self.customer_pay_amount_var),
             ],
             start=1,
         ):
             ttk.Label(form, text=label, style="Subtle.TLabel").grid(row=idx * 2 - 1, column=0, sticky="w")
             ttk.Entry(form, textvariable=var).grid(row=idx * 2, column=0, sticky="ew", pady=(0, 8))
         form.columnconfigure(0, weight=1)
-        ttk.Button(form, text="Them khach", style="Accent.TButton", command=self.add_customer).grid(row=11, column=0, sticky="ew", pady=(8, 0))
-        ttk.Button(form, text="Thu no", style="Accent.TButton", command=self.receive_debt_payment).grid(row=12, column=0, sticky="ew", pady=(8, 0))
-        ttk.Label(form, text="Ban thieu: nhap ID khach o man hinh Ban hang.", style="Subtle.TLabel").grid(row=13, column=0, sticky="w", pady=(12, 0))
+        ttk.Button(form, text="Thêm Khách", style="Accent.TButton", command=self.add_customer).grid(row=11, column=0, sticky="ew", pady=(8, 0))
+        ttk.Button(form, text="Thu Nợ", style="Accent.TButton", command=self.receive_debt_payment).grid(row=12, column=0, sticky="ew", pady=(8, 0))
+        ttk.Label(form, text="Mẹo: nhập ID ở màn hình bán hàng.", style="Subtle.TLabel").grid(row=13, column=0, sticky="w", pady=(12, 0))
 
-        ttk.Label(table_panel, text="Danh sach cong no", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(table_panel, text="Danh sách công nợ", style="Title.TLabel").grid(row=0, column=0, sticky="w")
         self.debt_tree = ttk.Treeview(
             table_panel,
             columns=("id", "code", "name", "phone", "sales", "paid", "debt"),
@@ -422,7 +476,7 @@ class PosApp(tk.Tk):
         self.pending_update_check: updater.UpdateCheck | None = None
 
     def _inventory_tree(self, parent: ttk.Frame) -> ttk.Treeview:
-        tree = ttk.Treeview(parent, columns=("id", "sku", "barcode", "name", "stock", "min", "price"), show="headings")
+        tree = ttk.Treeview(parent, columns=("id", "sku", "barcode", "name", "stock", "min", "price","note"), show="headings")
         for col, title, width in [
             ("id", "ID", 55),
             ("sku", "Mã", 110),
@@ -431,6 +485,7 @@ class PosApp(tk.Tk):
             ("stock", "Tồn", 80),
             ("min", "Tối thiểu", 85),
             ("price", "Giá bán", 110),
+            ("note", "Ghi chú nhập kho", 220),
         ]:
             tree.heading(col, text=title)
             tree.column(col, width=width, anchor="w")
@@ -459,7 +514,7 @@ class PosApp(tk.Tk):
                 tree.insert("", "end", values=self._inventory_values(row))
 
     def _inventory_values(self, row: InventoryRow) -> tuple[object, ...]:
-        return (row.product_id, row.sku, row.barcode or "", row.name, row.on_hand, row.min_stock, money(row.sale_price))
+        return (row.product_id, row.sku, row.barcode or "", row.name, row.on_hand, row.min_stock, money(row.sale_price),row.last_stock_note or "",)
 
     def search_sale_products(self) -> None:
         if not hasattr(self, "sale_product_tree"):
@@ -593,6 +648,7 @@ class PosApp(tk.Tk):
             return
         messagebox.showinfo("Thành công", f"Đã nhập kho. Tồn mới: {on_hand}")
         self.stock_qty_var.set("1")
+        self.stock_note_var.set("")
         self.refresh_all()
 
     def add_selected_to_cart(self) -> None:
@@ -606,7 +662,7 @@ class PosApp(tk.Tk):
             product = self.service.get_product(product_id)
             qty = parse_int(self.sale_qty_var.get(), "số lượng", minimum=1)
             price = parse_int(self.sale_price_var.get(), "giá bán") if self.sale_price_var.get().strip() else product.sale_price
-            discount = parse_int(self.sale_line_discount_var.get(), "giảm dòng")
+            discount = parse_int(self.sale_line_discount_var.get(), "giảm giá")
         except Exception as exc:
             self.show_error(exc)
             return
@@ -739,18 +795,18 @@ class PosApp(tk.Tk):
     def _install_backup_menu(self) -> None:
         menu_bar = tk.Menu(self)
         backup_menu = tk.Menu(menu_bar, tearoff=False)
-        backup_menu.add_command(label="Sao luu ngay", command=self.create_backup_now)
-        backup_menu.add_command(label="Chon thu muc sao luu...", command=self.choose_backup_folder)
-        backup_menu.add_command(label="Mo thu muc sao luu", command=self.open_backup_folder)
+        backup_menu.add_command(label="Sao lưu ngay", command=self.create_backup_now)
+        backup_menu.add_command(label="Chọn thư mục sao lưu...", command=self.choose_backup_folder)
+        backup_menu.add_command(label="Mở thư mục sao lưu", command=self.open_backup_folder)
         backup_menu.add_separator()
-        backup_menu.add_command(label="Phuc hoi tu file backup...", command=self.restore_from_backup)
-        backup_menu.add_command(label="So ban backup giu lai...", command=self.change_keep_last)
+        backup_menu.add_command(label="Phục hồi từ file Backups...", command=self.restore_from_backup)
+        backup_menu.add_command(label="Số lượng bản backup sẽ lưu...", command=self.change_keep_last)
         backup_menu.add_checkbutton(
-            label="Tu sao luu khi thoat",
+            label="Tự động sao lưu khi thoát",
             variable=self.auto_backup_var,
             command=self.toggle_auto_backup,
         )
-        menu_bar.add_cascade(label="Sao luu", menu=backup_menu)
+        menu_bar.add_cascade(label="Sao Lưu", menu=backup_menu)
         self.config(menu=menu_bar)
 
     def create_backup_now(self) -> None:

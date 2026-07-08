@@ -20,6 +20,7 @@ from .models import (
     SaleLineInput,
     SaleListRow,
     SaleResult,
+    StockMovementHistory,
 )
 
 
@@ -34,6 +35,44 @@ class NotEnoughStockError(PosError):
 class PosService:
     def __init__(self, db: Database) -> None:
         self.db = db
+
+    def stock_history(self, product_id: int, *, only_purchase: bool = False) -> list[StockMovementHistory]:
+        sql = """
+            SELECT
+                id,
+                product_id,
+                movement_type,
+                quantity,
+                unit_cost,
+                reference_type,
+                note,
+                created_at
+            FROM stock_movements
+            WHERE product_id = ?
+        """
+        params: list[object] = [product_id]
+
+        if only_purchase:
+            sql += " AND movement_type = 'purchase'"
+
+        sql += " ORDER BY created_at DESC, id DESC"
+
+        with self.db.connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+
+        return [
+            StockMovementHistory(
+                id=row["id"],
+                product_id=row["product_id"],
+                movement_type=row["movement_type"],
+                quantity=row["quantity"],
+                unit_cost=row["unit_cost"],
+                reference_type=row["reference_type"],
+                note=row["note"],
+                created_at=row["created_at"],
+            )
+            for row in rows
+        ]
 
     def create_product(
         self,
@@ -418,7 +457,16 @@ class PosService:
                     p.unit,
                     p.min_stock,
                     p.sale_price,
-                    COALESCE(SUM(sm.quantity), 0) AS on_hand
+                    COALESCE(SUM(sm.quantity), 0) AS on_hand,
+                    (
+                        SELECT sm2.note
+                        FROM stock_movements sm2
+                        WHERE sm2.product_id = p.id
+                          AND sm2.note IS NOT NULL
+                          AND TRIM(sm2.note) <> ''
+                        ORDER BY sm2.created_at DESC, sm2.id DESC
+                        LIMIT 1
+                    ) AS last_stock_note
                 FROM products p
                 LEFT JOIN stock_movements sm ON sm.product_id = p.id
                 WHERE p.is_active = 1
@@ -436,6 +484,7 @@ class PosService:
                     on_hand=int(row["on_hand"]),
                     min_stock=row["min_stock"],
                     sale_price=row["sale_price"],
+                    last_stock_note=row["last_stock_note"],
                 )
                 for row in rows
             ]

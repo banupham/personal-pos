@@ -1,6 +1,6 @@
 {
-  "version": "0.1.2",
-  "notes": "Release 0.1.2: unify backup features into the main PersonalPOS app, remove app_tkinter_backup, and rebuild the Windows exe package.",
+  "version": "0.1.3",
+  "notes": "Release 0.1.3: fix lỗi thời gian, fix phần thu nợ , fix hiển thị doanh thu",
   "package_url": "https://github.com/banupham/personal-pos/raw/main/release/PersonalPOS_0.1.2.zip",
   "sha256": "e90f33da61a0c80159c8cdd4ef8d1bed8975f2c687cf38ef1aa9dd0a9ec62be6"
 }

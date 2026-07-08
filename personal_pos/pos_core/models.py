@@ -104,6 +104,7 @@ class InventoryRow:
     on_hand: int
     min_stock: int
     sale_price: int
+    last_stock_note: str | None = None
 
 
 @dataclass(frozen=True)
@@ -135,3 +136,14 @@ class ProductSalesSummary:
     revenue: int
     cost: int
     gross_profit: int
+
+@dataclass(frozen=True)
+class StockMovementHistory:
+    id: int
+    product_id: int
+    movement_type: str
+    quantity: int
+    unit_cost: int | None
+    reference_type: str | None
+    note: str | None
+    created_at: str
