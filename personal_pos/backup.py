@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 
-APP_DIR = Path(__file__).resolve().parent
+APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 DATA_DIR = APP_DIR / "data"
 CONFIG_PATH = DATA_DIR / "backup_config.json"
 DEFAULT_BACKUP_DIR = DATA_DIR / "backups" / "database"

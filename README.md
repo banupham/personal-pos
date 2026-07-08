@@ -1,4 +1,4 @@
-# Personal POS
+﻿# Personal POS
 
 Logic core for a small desktop sales and inventory app.
 
@@ -23,7 +23,7 @@ test menu.
 To run the UI with database backup tools enabled:
 
 ```powershell
-python -m personal_pos.app_tkinter_backup
+python -m personal_pos.app_tkinter
 ```
 
 Current desktop features:
@@ -31,7 +31,7 @@ Current desktop features:
 - Fast product search and barcode/SKU Enter-to-add on the sales screen.
 - Customer debt: create customers, sell with partial payment, collect debt.
 - Reports: daily revenue, gross profit, invoices, and top-selling products.
-- Database backup menu through `personal_pos.app_tkinter_backup`.
+- Database backup menu in the main `personal_pos.app_tkinter` UI.
 - GitHub update checker/installer through `update_config.json`.
 
 ## Database Backups
@@ -39,7 +39,7 @@ Current desktop features:
 Use the backup-enabled desktop UI:
 
 ```powershell
-python -m personal_pos.app_tkinter_backup
+python -m personal_pos.app_tkinter
 ```
 
 Open the `Sao lưu` menu to:
@@ -203,6 +203,7 @@ python -m personal_pos.cli
 - `updater.py`: GitHub manifest update, package validation, program backup, database-safe source install, and frozen-exe staging logic.
 - `exe_update_helper.py`: helper process used by packaged Windows exe builds to apply staged updates after the main app closes.
 - `app_tkinter.py`: desktop UI for personal use.
-- `app_tkinter_backup.py`: desktop UI entry point with backup menu and auto-backup on exit.
+- `app_tkinter.py`: main desktop UI with sales, inventory, reports, update, backup menu, and auto-backup on exit.
 - `cli.py`: console menu for quick manual testing.
 - `demo.py`: quick command-line smoke test before building the desktop UI.
+

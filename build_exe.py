@@ -48,7 +48,7 @@ def build_app() -> None:
             "--windowed",
             "--name",
             "PersonalPOS",
-            "personal_pos/app_tkinter_backup.py",
+            "personal_pos/app_tkinter.py",
         ]
     )
 

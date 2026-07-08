@@ -2,17 +2,26 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+import sys
 import tkinter as tk
-from tkinter import messagebox, ttk
+from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from .pos_core import Database, PosService
-from .pos_core.models import InventoryRow, SaleLineInput
-from .pos_core.services import NotEnoughStockError, PosError
-from . import updater
-from .version import __version__
+try:
+    from . import backup, updater
+    from .pos_core import Database, PosService
+    from .pos_core.models import InventoryRow, SaleLineInput
+    from .pos_core.services import NotEnoughStockError, PosError
+    from .version import __version__
+except ImportError:
+    from personal_pos import backup, updater
+    from personal_pos.pos_core import Database, PosService
+    from personal_pos.pos_core.models import InventoryRow, SaleLineInput
+    from personal_pos.pos_core.services import NotEnoughStockError, PosError
+    from personal_pos.version import __version__
 
 
-DB_PATH = Path(__file__).parent / "data" / "app_pos.db"
+APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).parent
+DB_PATH = APP_DIR / "data" / "app_pos.db"
 
 
 def money(value: int) -> str:
@@ -47,6 +56,10 @@ class PosApp(tk.Tk):
         self.configure(bg="#f3f5f7")
         self._configure_style()
         self._build_layout()
+        self.backup_config = backup.load_config()
+        self.auto_backup_var = tk.BooleanVar(value=self.backup_config.auto_backup_on_exit)
+        self._install_backup_menu()
+        self.protocol("WM_DELETE_WINDOW", self.close_with_optional_backup)
         self.refresh_all()
 
     def _configure_style(self) -> None:
@@ -715,13 +728,125 @@ class PosApp(tk.Tk):
 
     def export_csv(self) -> None:
         try:
-            export_dir = Path(__file__).parent / "data" / "exports"
+            export_dir = APP_DIR / "data" / "exports"
             inventory = self.service.export_inventory_csv(export_dir / "inventory.csv")
             sales = self.service.export_sales_csv(export_dir / "sales_today.csv", date.today(), date.today())
         except Exception as exc:
             self.show_error(exc)
             return
         messagebox.showinfo("Đã xuất CSV", f"Tồn kho:\n{inventory}\n\nHóa đơn:\n{sales}")
+
+    def _install_backup_menu(self) -> None:
+        menu_bar = tk.Menu(self)
+        backup_menu = tk.Menu(menu_bar, tearoff=False)
+        backup_menu.add_command(label="Sao luu ngay", command=self.create_backup_now)
+        backup_menu.add_command(label="Chon thu muc sao luu...", command=self.choose_backup_folder)
+        backup_menu.add_command(label="Mo thu muc sao luu", command=self.open_backup_folder)
+        backup_menu.add_separator()
+        backup_menu.add_command(label="Phuc hoi tu file backup...", command=self.restore_from_backup)
+        backup_menu.add_command(label="So ban backup giu lai...", command=self.change_keep_last)
+        backup_menu.add_checkbutton(
+            label="Tu sao luu khi thoat",
+            variable=self.auto_backup_var,
+            command=self.toggle_auto_backup,
+        )
+        menu_bar.add_cascade(label="Sao luu", menu=backup_menu)
+        self.config(menu=menu_bar)
+
+    def create_backup_now(self) -> None:
+        try:
+            path = backup.create_database_backup(DB_PATH, reason="manual", config=self.backup_config)
+        except Exception as exc:
+            self.show_error(exc)
+            return
+        messagebox.showinfo("Da sao luu", f"Da tao backup database:\n{path}")
+
+    def choose_backup_folder(self) -> None:
+        initial_dir = self._best_initial_backup_dir()
+        selected = filedialog.askdirectory(
+            title="Chon thu muc sao luu database",
+            initialdir=str(initial_dir),
+        )
+        if not selected:
+            return
+        self.backup_config = backup.update_config(backup_dir=selected)
+        messagebox.showinfo(
+            "Da luu thu muc sao luu",
+            f"Database se duoc sao luu vao:\n{self.backup_config.backup_dir}\n\n"
+            "Ban co the chon thu muc nam trong Google Drive Desktop de tu dong dong bo len may.",
+        )
+
+    def open_backup_folder(self) -> None:
+        try:
+            backup.open_backup_folder(self.backup_config)
+        except Exception as exc:
+            self.show_error(exc)
+
+    def restore_from_backup(self) -> None:
+        selected = filedialog.askopenfilename(
+            title="Chon file backup .db de phuc hoi",
+            initialdir=str(self.backup_config.backup_dir),
+            filetypes=[("SQLite database", "*.db"), ("All files", "*.*")],
+        )
+        if not selected:
+            return
+        allowed = messagebox.askyesno(
+            "Xac nhan phuc hoi",
+            "Phuc hoi se ghi de database hien tai. Ung dung se tao mot ban backup truoc khi ghi de. Tiep tuc?",
+        )
+        if not allowed:
+            return
+        try:
+            pre_restore = backup.restore_database_backup(selected, DB_PATH, config=self.backup_config)
+        except Exception as exc:
+            self.show_error(exc)
+            return
+        messagebox.showinfo(
+            "Da phuc hoi",
+            f"Da phuc hoi database tu:\n{selected}\n\nBackup truoc khi phuc hoi:\n{pre_restore}\n\n"
+            "Hay dong va mo lai ung dung de tai lai du lieu.",
+        )
+
+    def change_keep_last(self) -> None:
+        value = simpledialog.askinteger(
+            "So ban backup giu lai",
+            "Giu lai bao nhieu ban backup gan nhat?",
+            initialvalue=self.backup_config.keep_last,
+            minvalue=1,
+            maxvalue=500,
+            parent=self,
+        )
+        if value is None:
+            return
+        self.backup_config = backup.update_config(keep_last=value)
+        removed = backup.cleanup_old_backups(config=self.backup_config)
+        messagebox.showinfo(
+            "Da cap nhat",
+            f"Se giu lai {self.backup_config.keep_last} ban backup gan nhat.\n"
+            f"Da xoa {len(removed)} ban cu.",
+        )
+
+    def toggle_auto_backup(self) -> None:
+        self.backup_config = backup.update_config(auto_backup_on_exit=self.auto_backup_var.get())
+
+    def close_with_optional_backup(self) -> None:
+        if self.auto_backup_var.get() and Path(DB_PATH).exists():
+            try:
+                backup.create_database_backup(DB_PATH, reason="auto_exit", config=self.backup_config)
+            except Exception as exc:
+                should_close = messagebox.askyesno(
+                    "Sao luu that bai",
+                    f"Khong the tao backup truoc khi thoat:\n{exc}\n\nVan thoat ung dung?",
+                )
+                if not should_close:
+                    return
+        self.destroy()
+
+    def _best_initial_backup_dir(self) -> Path:
+        candidates = backup.google_drive_candidates()
+        if candidates:
+            return candidates[0]
+        return self.backup_config.backup_dir
 
     def _load_manifest_url_for_ui(self) -> str:
         try:
