@@ -5,8 +5,11 @@ from datetime import datetime
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 from typing import Any
 from urllib.parse import urlparse
 from urllib.request import urlopen
@@ -15,13 +18,20 @@ import zipfile
 from .version import __version__
 
 
-APP_DIR = Path(__file__).resolve().parent
-PROJECT_DIR = APP_DIR.parent
-CONFIG_PATH = APP_DIR / "update_config.json"
-UPDATE_DIR = APP_DIR / "data" / "updates"
-BACKUP_DIR = APP_DIR / "data" / "backups" / "program"
+SOURCE_APP_DIR = Path(__file__).resolve().parent
+IS_FROZEN = bool(getattr(sys, "frozen", False))
+
+# Source mode: personal_pos/ is the app directory and the project root is one level up.
+# Frozen exe mode: the app directory is the folder that contains PersonalPOS.exe.
+APP_DIR = Path(sys.executable).resolve().parent if IS_FROZEN else SOURCE_APP_DIR
+PROJECT_DIR = APP_DIR if IS_FROZEN else SOURCE_APP_DIR.parent
+CONFIG_PATH = APP_DIR / "update_config.json" if IS_FROZEN else SOURCE_APP_DIR / "update_config.json"
+DATA_DIR = APP_DIR / "data" if IS_FROZEN else SOURCE_APP_DIR / "data"
+UPDATE_DIR = DATA_DIR / "updates"
+BACKUP_DIR = DATA_DIR / "backups" / "program"
 UPDATE_HISTORY_PATH = UPDATE_DIR / "update_history.jsonl"
-DEFAULT_DB_PATH = APP_DIR / "data" / "app_pos.db"
+DEFAULT_DB_PATH = DATA_DIR / "app_pos.db"
+STAGE_DIR = UPDATE_DIR / "staged"
 
 PROTECTED_UPDATE_DIRS = {
     ".git",
@@ -54,6 +64,10 @@ class UpdateCheck:
     notes: str
     package_url: str
     sha256: str | None
+
+
+def is_frozen_app() -> bool:
+    return IS_FROZEN
 
 
 def load_config(path: Path = CONFIG_PATH) -> UpdateConfig:
@@ -149,9 +163,20 @@ def install_update(
         database_backup_path = _backup_database_before_update(db_path)
 
     program_backup_path = backup_dir / f"personal_pos_program_backup_{timestamp}.zip"
+
+    if is_frozen_app():
+        _prepare_frozen_exe_update(
+            package_path=package_path,
+            app_dir=project_dir,
+            backup_path=program_backup_path,
+            database_backup_path=database_backup_path,
+            timestamp=timestamp,
+        )
+        return program_backup_path
+
     _backup_project(project_dir, program_backup_path)
     _extract_update(package_path, project_dir)
-    _write_update_history(package_path, program_backup_path, database_backup_path)
+    _write_update_history(package_path, program_backup_path, database_backup_path, mode="source")
     return program_backup_path
 
 
@@ -160,6 +185,53 @@ def download_and_install(check: UpdateCheck) -> Path:
         raise UpdateError("No newer version available")
     package = download_package(check.package_url, check.sha256)
     return install_update(package)
+
+
+def _prepare_frozen_exe_update(
+    *,
+    package_path: Path,
+    app_dir: Path,
+    backup_path: Path,
+    database_backup_path: Path | None,
+    timestamp: str,
+) -> None:
+    if not sys.platform.startswith("win"):
+        raise UpdateError("Frozen exe updater is currently implemented for Windows only")
+
+    current_exe = Path(sys.executable).resolve()
+    app_dir = current_exe.parent
+    _backup_project(app_dir, backup_path)
+
+    staged_dir = (STAGE_DIR / timestamp).resolve()
+    if staged_dir.exists():
+        shutil.rmtree(staged_dir)
+    staged_dir.mkdir(parents=True, exist_ok=True)
+    _extract_update(package_path, staged_dir)
+    _validate_frozen_stage(staged_dir, current_exe.name)
+
+    pending_path = _write_pending_exe_update(
+        app_dir=app_dir,
+        staged_dir=staged_dir,
+        current_exe=current_exe,
+        pid=os.getpid(),
+        timestamp=timestamp,
+    )
+    helper = _find_exe_update_helper(app_dir)
+    launched_helper = False
+    if helper is not None:
+        _launch_exe_update_helper(helper, pending_path)
+        launched_helper = True
+
+    _write_update_history(
+        package_path,
+        backup_path,
+        database_backup_path,
+        mode="frozen-exe",
+        pending_path=pending_path,
+        staged_dir=staged_dir,
+        helper_path=helper,
+        launched_helper=launched_helper,
+    )
 
 
 def _backup_database_before_update(db_path: Path) -> Path | None:
@@ -221,7 +293,7 @@ def _backup_project(project_dir: Path, backup_path: Path) -> None:
             archive.write(path, relative.as_posix())
 
 
-def _extract_update(package_path: Path, project_dir: Path) -> None:
+def _extract_update(package_path: Path, target_dir: Path) -> None:
     with zipfile.ZipFile(package_path) as archive:
         members = [member for member in archive.infolist() if not member.is_dir()]
         prefix = _detect_common_prefix(members)
@@ -235,8 +307,8 @@ def _extract_update(package_path: Path, project_dir: Path) -> None:
             relative_path = Path(relative_name)
             if _should_skip_update_file(relative_path):
                 continue
-            target = (project_dir / relative_path).resolve()
-            if not _is_relative_to(target, project_dir):
+            target = (target_dir / relative_path).resolve()
+            if not _is_relative_to(target, target_dir):
                 raise UpdateError(f"Unsafe path in update package: {member.filename}")
             writable_members.append((member, target))
 
@@ -262,6 +334,56 @@ def _should_skip_update_file(relative_path: Path) -> bool:
     return False
 
 
+def _validate_frozen_stage(staged_dir: Path, current_exe_name: str) -> None:
+    staged_files = [path for path in staged_dir.rglob("*") if path.is_file()]
+    if not staged_files:
+        raise UpdateError("Staged exe update is empty")
+    staged_exes = [path.name.lower() for path in staged_files if path.suffix.lower() == ".exe"]
+    if current_exe_name.lower() not in staged_exes:
+        raise UpdateError(
+            f"Exe update package must contain {current_exe_name}. "
+            "Build a release zip that contains the new application exe."
+        )
+
+
+def _write_pending_exe_update(
+    *,
+    app_dir: Path,
+    staged_dir: Path,
+    current_exe: Path,
+    pid: int,
+    timestamp: str,
+) -> Path:
+    UPDATE_DIR.mkdir(parents=True, exist_ok=True)
+    pending_path = UPDATE_DIR / f"update_pending_{timestamp}.json"
+    payload = {
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "app_dir": str(app_dir),
+        "staged_dir": str(staged_dir),
+        "exe_name": current_exe.name,
+        "pid": pid,
+    }
+    pending_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return pending_path
+
+
+def _find_exe_update_helper(app_dir: Path) -> Path | None:
+    current_stem = Path(sys.executable).stem
+    candidates = [
+        app_dir / "PersonalPOSUpdater.exe",
+        app_dir / f"{current_stem}Updater.exe",
+        app_dir / "updater_helper.exe",
+    ]
+    for candidate in candidates:
+        if candidate.exists() and candidate.is_file():
+            return candidate
+    return None
+
+
+def _launch_exe_update_helper(helper_path: Path, pending_path: Path) -> None:
+    subprocess.Popen([str(helper_path), "--pending", str(pending_path)], cwd=str(helper_path.parent))
+
+
 def _detect_common_prefix(members: list[zipfile.ZipInfo]) -> str:
     first_parts = [member.filename.split("/", 1)[0] for member in members if "/" in member.filename]
     if first_parts and len(set(first_parts)) == 1:
@@ -277,13 +399,28 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
     return True
 
 
-def _write_update_history(package_path: Path, program_backup_path: Path, database_backup_path: Path | None) -> None:
+def _write_update_history(
+    package_path: Path,
+    program_backup_path: Path,
+    database_backup_path: Path | None,
+    *,
+    mode: str,
+    pending_path: Path | None = None,
+    staged_dir: Path | None = None,
+    helper_path: Path | None = None,
+    launched_helper: bool | None = None,
+) -> None:
     UPDATE_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "created_at": datetime.now().isoformat(timespec="seconds"),
+        "mode": mode,
         "package_path": str(package_path),
         "program_backup_path": str(program_backup_path),
         "database_backup_path": str(database_backup_path) if database_backup_path else None,
+        "pending_path": str(pending_path) if pending_path else None,
+        "staged_dir": str(staged_dir) if staged_dir else None,
+        "helper_path": str(helper_path) if helper_path else None,
+        "launched_helper": launched_helper,
     }
     with UPDATE_HISTORY_PATH.open("a", encoding="utf-8") as file:
         file.write(json.dumps(payload, ensure_ascii=False) + "\n")
