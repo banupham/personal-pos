@@ -40,12 +40,13 @@ class UpdaterTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             package = root / "update.zip"
-            package.write_bytes(b"package")
-            digest = hashlib.sha256(b"package").hexdigest()
+            with zipfile.ZipFile(package, "w") as archive:
+                archive.writestr("repo-main/file.txt", "package")
+            digest = hashlib.sha256(package.read_bytes()).hexdigest()
 
             downloaded = updater.download_package(str(package), digest, root / "updates")
 
-            self.assertEqual(downloaded.read_bytes(), b"package")
+            self.assertEqual(downloaded.read_bytes(), package.read_bytes())
 
     def test_install_update_extracts_zip_and_creates_backup(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -58,7 +59,7 @@ class UpdaterTests(unittest.TestCase):
                 archive.writestr("repo-main/new.txt", "new")
                 archive.writestr("repo-main/personal_pos/version.py", '__version__ = "0.2.0"\n')
 
-            backup = updater.install_update(package, project, root / "backups")
+            backup = updater.install_update(package, project, root / "backups", backup_database=False)
 
             self.assertTrue(backup.exists())
             self.assertEqual((project / "new.txt").read_text(encoding="utf-8"), "new")

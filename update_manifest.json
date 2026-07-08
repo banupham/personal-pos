@@ -1,6 +1,6 @@
 {
   "version": "0.1.1",
-  "notes": "Release 0.1.1: add database backup workflow and harden the in-app GitHub updater. Before installing an update, the app now backs up the SQLite database, validates the downloaded zip package, skips runtime data files during extraction, and writes update history under personal_pos/data/updates/update_history.jsonl.",
-  "package_url": "https://github.com/banupham/personal-pos/archive/refs/heads/main.zip",
-  "sha256": ""
+  "notes": "Release 0.1.1: first Windows exe package with PersonalPOS.exe, PersonalPOSUpdater.exe, database backup before update, and GitHub update manifest support.",
+  "package_url": "https://github.com/banupham/personal-pos/raw/main/release/PersonalPOS_0.1.1.zip",
+  "sha256": "b6082b09a290bf9a28ed092cee6900d573826f1e778e8929b2dd0828bd53252d"
 }
