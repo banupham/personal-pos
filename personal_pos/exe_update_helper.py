@@ -59,8 +59,8 @@ def _validate_paths(app_dir: Path, staged_dir: Path) -> None:
         raise ExeUpdateHelperError(f"Application directory does not exist: {app_dir}")
     if not staged_dir.exists() or not staged_dir.is_dir():
         raise ExeUpdateHelperError(f"Staged update directory does not exist: {staged_dir}")
-    if app_dir == staged_dir or app_dir in staged_dir.parents:
-        raise ExeUpdateHelperError("Staged update directory must not be inside the application directory")
+    if app_dir == staged_dir or staged_dir in app_dir.parents:
+        raise ExeUpdateHelperError("Staged update directory must not be the application directory or its parent")
 
 
 def _wait_for_process_to_exit(pid: int, *, timeout_seconds: int) -> None:

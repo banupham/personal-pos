@@ -45,7 +45,7 @@ class Database:
                 amount INTEGER NOT NULL CHECK (amount > 0),
                 payment_method TEXT NOT NULL DEFAULT 'cash',
                 note TEXT,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
             );
 
             CREATE INDEX IF NOT EXISTS idx_customer_payments_customer_id
@@ -65,8 +65,8 @@ CREATE TABLE IF NOT EXISTS products (
     sale_price INTEGER NOT NULL DEFAULT 0 CHECK (sale_price >= 0),
     min_stock INTEGER NOT NULL DEFAULT 0 CHECK (min_stock >= 0),
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS customers (
@@ -76,8 +76,8 @@ CREATE TABLE IF NOT EXISTS customers (
     phone TEXT,
     address TEXT,
     note TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS suppliers (
@@ -87,8 +87,8 @@ CREATE TABLE IF NOT EXISTS suppliers (
     phone TEXT,
     address TEXT,
     note TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS stock_movements (
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS stock_movements (
     reference_type TEXT,
     reference_id INTEGER,
     note TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS sales (
@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS sales (
     paid INTEGER NOT NULL DEFAULT 0 CHECK (paid >= 0),
     payment_method TEXT NOT NULL DEFAULT 'cash',
     note TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS sale_items (
