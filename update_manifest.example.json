@@ -1,6 +1,0 @@
-{
-  "version": "0.1.1",
-  "notes": "Short release notes shown in the desktop updater.",
-  "package_url": "https://github.com/banupham/personal-pos/archive/refs/heads/main.zip",
-  "sha256": "optional_sha256_checksum_or_empty_string"
-}
