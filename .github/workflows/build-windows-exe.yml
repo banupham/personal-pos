@@ -7,7 +7,6 @@ on:
     paths-ignore:
       - "release/**"
       - "update_manifest.json"
-      - "*.md"
   workflow_dispatch:
 
 permissions:
