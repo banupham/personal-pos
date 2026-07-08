@@ -78,21 +78,59 @@ python -m personal_pos.backup config --backup-dir "C:\Users\YOUR_NAME\Google Dri
 
 ## GitHub Updates
 
-1. Push this project to a GitHub repository.
-2. Create `update_manifest.json` in that repository using
-   `update_manifest.example.json` as a template.
-3. Set `personal_pos/update_config.json` to the raw manifest URL, for example:
+The desktop app can check a JSON manifest on GitHub, download a zip package,
+back up the database, back up the program files, and extract the new version.
+
+Default config:
 
 ```json
 {
-  "manifest_url": "https://raw.githubusercontent.com/YOUR_GITHUB_USERNAME/YOUR_REPO/main/update_manifest.json"
+  "manifest_url": "https://raw.githubusercontent.com/banupham/personal-pos/main/update_manifest.json"
 }
 ```
 
-4. In the desktop UI, open `Cap nhat`, click `Kiem tra`, then `Tai va cai`.
+The release manifest lives at:
 
-The updater downloads a zip package, creates a backup in `personal_pos/data/backups`,
-then extracts the new files. Restart the app after installing an update.
+```text
+update_manifest.json
+```
+
+Required manifest fields:
+
+```json
+{
+  "version": "0.1.1",
+  "notes": "Release notes shown inside the app.",
+  "package_url": "https://github.com/banupham/personal-pos/archive/refs/heads/main.zip",
+  "sha256": ""
+}
+```
+
+`sha256` may be an empty string for branch zip updates. For a stricter release,
+publish a fixed zip package, calculate its SHA256, and put that value in the
+manifest.
+
+In the desktop UI, open `Cap nhat`, click `Kiem tra`, then `Tai va cai`.
+
+When installing an update, the updater now:
+
+1. downloads and validates the zip package,
+2. checks SHA256 when the manifest provides it,
+3. creates a database backup for `personal_pos/data/app_pos.db`,
+4. creates a program backup in `personal_pos/data/backups/program`,
+5. extracts only application files,
+6. skips runtime data under `personal_pos/data`,
+7. writes update history to `personal_pos/data/updates/update_history.jsonl`.
+
+Restart the app after installing an update.
+
+Important release workflow:
+
+1. Change code.
+2. Bump `personal_pos/version.py`.
+3. Update `update_manifest.json` with the same version.
+4. Commit and merge to `main`.
+5. Existing installed apps can then detect the new version.
 
 ## Run Console Test Menu
 
@@ -106,6 +144,7 @@ python -m personal_pos.cli
 - `pos_core/models.py`: dataclasses used by services.
 - `pos_core/services.py`: product, customer, stock, sale, and report logic.
 - `backup.py`: database backup, restore, cleanup, and backup config logic.
+- `updater.py`: GitHub manifest update, package validation, program backup, and database-safe install logic.
 - `app_tkinter.py`: desktop UI for personal use.
 - `app_tkinter_backup.py`: desktop UI entry point with backup menu and auto-backup on exit.
 - `cli.py`: console menu for quick manual testing.
