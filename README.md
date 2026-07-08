@@ -81,7 +81,7 @@ python -m personal_pos.backup config --backup-dir "C:\Users\YOUR_NAME\Google Dri
 The desktop app can check a JSON manifest on GitHub, download a zip package,
 back up the database, back up the program files, and extract the new version.
 
-Default config:
+Default source-code config:
 
 ```json
 {
@@ -89,7 +89,7 @@ Default config:
 }
 ```
 
-The release manifest lives at:
+The source-code release manifest lives at:
 
 ```text
 update_manifest.json
@@ -112,7 +112,7 @@ manifest.
 
 In the desktop UI, open `Cap nhat`, click `Kiem tra`, then `Tai va cai`.
 
-When installing an update, the updater now:
+When installing an update from source mode, the updater now:
 
 1. downloads and validates the zip package,
 2. checks SHA256 when the manifest provides it,
@@ -124,13 +124,69 @@ When installing an update, the updater now:
 
 Restart the app after installing an update.
 
+## Windows EXE Update Framework
+
+When the app is packaged as a Windows `.exe`, it cannot safely overwrite the
+currently running executable. The updater now has a separate frozen-exe flow:
+
+1. the app checks the manifest,
+2. downloads and validates the release zip,
+3. backs up the SQLite database,
+4. backs up the current program folder,
+5. extracts the new release to `data/updates/staged/<timestamp>`,
+6. writes `data/updates/update_pending_<timestamp>.json`,
+7. launches a helper exe when one is present,
+8. the helper waits until the app closes, copies the staged files into the app
+   folder, then reopens the app.
+
+The helper source is:
+
+```text
+personal_pos/exe_update_helper.py
+```
+
+For an exe build, package this helper as a separate executable beside the main
+app, using one of these names:
+
+```text
+PersonalPOSUpdater.exe
+<MainExeName>Updater.exe
+updater_helper.exe
+```
+
+The exe release zip should contain the new main exe and helper exe, for example:
+
+```text
+PersonalPOS.exe
+PersonalPOSUpdater.exe
+update_config.json
+```
+
+Do not put `data/app_pos.db` or any user database file inside the update zip.
+The helper deliberately skips `data`, `.db`, `.sqlite`, and `.sqlite3` files.
+
+Use `update_manifest_exe.example.json` as the template for packaged Windows
+releases:
+
+```json
+{
+  "version": "0.1.2",
+  "notes": "Release notes for the packaged Windows exe build.",
+  "package_url": "https://github.com/banupham/personal-pos/releases/download/v0.1.2/PersonalPOS_0.1.2_windows.zip",
+  "sha256": "required_sha256_checksum_for_the_release_zip"
+}
+```
+
 Important release workflow:
 
 1. Change code.
 2. Bump `personal_pos/version.py`.
-3. Update `update_manifest.json` with the same version.
-4. Commit and merge to `main`.
-5. Existing installed apps can then detect the new version.
+3. Update the matching manifest with the same version.
+4. For source mode, update `update_manifest.json`.
+5. For exe mode, build and upload the Windows release zip, then update the exe
+   manifest URL used by `update_config.json`.
+6. Commit and merge to `main`.
+7. Existing installed apps can then detect the new version.
 
 ## Run Console Test Menu
 
@@ -144,7 +200,8 @@ python -m personal_pos.cli
 - `pos_core/models.py`: dataclasses used by services.
 - `pos_core/services.py`: product, customer, stock, sale, and report logic.
 - `backup.py`: database backup, restore, cleanup, and backup config logic.
-- `updater.py`: GitHub manifest update, package validation, program backup, and database-safe install logic.
+- `updater.py`: GitHub manifest update, package validation, program backup, database-safe source install, and frozen-exe staging logic.
+- `exe_update_helper.py`: helper process used by packaged Windows exe builds to apply staged updates after the main app closes.
 - `app_tkinter.py`: desktop UI for personal use.
 - `app_tkinter_backup.py`: desktop UI entry point with backup menu and auto-backup on exit.
 - `cli.py`: console menu for quick manual testing.
