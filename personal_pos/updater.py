@@ -382,7 +382,11 @@ def _find_exe_update_helper(app_dir: Path) -> Path | None:
 
 
 def _launch_exe_update_helper(helper_path: Path, pending_path: Path) -> None:
-    subprocess.Popen([str(helper_path), "--pending", str(pending_path)], cwd=str(helper_path.parent))
+    helper_run_dir = Path(tempfile.gettempdir()) / "PersonalPOS" / "helper"
+    helper_run_dir.mkdir(parents=True, exist_ok=True)
+    helper_copy = helper_run_dir / f"{helper_path.stem}_{os.getpid()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}{helper_path.suffix}"
+    shutil.copy2(helper_path, helper_copy)
+    subprocess.Popen([str(helper_copy), "--pending", str(pending_path)], cwd=str(helper_run_dir))
 
 
 def _detect_common_prefix(members: list[zipfile.ZipInfo]) -> str:

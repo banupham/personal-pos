@@ -75,11 +75,28 @@ def _wait_for_process_to_exit(pid: int, *, timeout_seconds: int) -> None:
 def _process_exists(pid: int) -> bool:
     if pid <= 0:
         return False
+    if sys.platform.startswith("win"):
+        return _windows_process_exists(pid)
     try:
         os.kill(pid, 0)
-    except OSError:
+    except (OSError, SystemError):
         return False
     return True
+
+
+def _windows_process_exists(pid: int) -> bool:
+    import ctypes
+
+    synchronize = 0x00100000
+    wait_timeout = 0x00000102
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(synchronize, False, pid)
+    if not handle:
+        return False
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == wait_timeout
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 def _copy_update_files(staged_dir: Path, app_dir: Path) -> None:
