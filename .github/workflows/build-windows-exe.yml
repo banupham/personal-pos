@@ -1,0 +1,73 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - "release/**"
+      - "update_manifest.json"
+      - "*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+
+      - name: Run tests
+        run: |
+          python -m compileall personal_pos
+          python -m unittest discover personal_pos
+
+      - name: Build Windows executables
+        run: python build_exe.py
+
+      - name: Update manifest and release package
+        shell: pwsh
+        run: |
+          $version = python -c "from personal_pos.version import __version__; print(__version__)"
+          $package = "dist\release\PersonalPOS_$version.zip"
+          $releaseDir = "release"
+          New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+          Copy-Item -LiteralPath $package -Destination "$releaseDir\PersonalPOS_$version.zip" -Force
+          $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath "$releaseDir\PersonalPOS_$version.zip").Hash.ToLower()
+          $manifest = [ordered]@{
+            version = $version
+            notes = "Automated Windows exe build for version $version."
+            package_url = "https://github.com/${{ github.repository }}/raw/main/release/PersonalPOS_$version.zip"
+            sha256 = $sha
+          }
+          $json = $manifest | ConvertTo-Json
+          [System.IO.File]::WriteAllText((Resolve-Path "update_manifest.json"), $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
+
+      - name: Commit release artifacts
+        shell: pwsh
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add release update_manifest.json
+          git diff --cached --quiet
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "No release changes to commit."
+            exit 0
+          }
+          $version = python -c "from personal_pos.version import __version__; print(__version__)"
+          git commit -m "Build Windows exe release $version [skip ci]"
+          git push
